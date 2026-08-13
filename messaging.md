@@ -319,7 +319,7 @@ Client sends commands to the server. Contains command objects based on the clien
 
 Server sends state updates to the client. Contains role-specific state objects.
 
-Only include fields that have changed. The client will merge these updates into existing state. A leaf field set to `null` should be cleared from the client's state; a whole role object set to `null` clears all of that role's state.
+Only include fields that have changed. The client will merge these updates into existing state; for the `metadata` and `color` objects, a future `timestamp` defers the merge (see scheduled updates for [`metadata`](roles/metadata/v1.md#scheduled-metadata-updates) and [`color`](roles/color/v1.md#scheduled-color-updates)). A leaf field set to `null` should be cleared from the client's state; a whole role object set to `null` clears all of that role's state, taking effect immediately and discarding any pending scheduled update.
 
 The merge is shallow: a nested object (e.g., `metadata.progress`) is replaced or cleared as a whole, never deep-merged, so nested objects are always sent complete.
 
