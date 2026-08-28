@@ -293,14 +293,21 @@ A condition during pairing that no conformant peer produces - a malformed or mis
 
 ### Client → Server: `client/hello` pair-method descriptor
 
-Each entry in `supported_pair_methods` in [`client/hello`](messaging.md#client--server-clienthello) is a descriptor object that names the pairing method and advertises the kind of operator interaction the client expects so the server can render appropriate UX.
+`supported_pair_methods` in [`client/hello`](messaging.md#client--server-clienthello) is an object keyed by pairing method identifier. Each value is a descriptor object that advertises the kind of operator interaction the client expects so the server can render appropriate UX.
 
-- `method`: 'dynamic_pairing_code' | 'pairing_psk' | 'static_pairing_code' - the pairing method identifier.
-- `out_channels?`: ('display' | 'speaker')[] - informational hint for `dynamic_pairing_code` only, listing the channels through which the per-session pairing code is conveyed to the operator.
-- `formats?`: ('digits' | 'qr_code')[] - the [emission formats](#dynamic-pairing-code-flow) the client offers. Required on `dynamic_pairing_code` descriptors, absent on others. Non-empty; `qr_code` requires a display able to render a QR code.
-- `locations?`: ('device' | 'leaflet' | 'operator')[] - informational hint for `static_pairing_code` and `pairing_psk` only, listing where the operator can find the method's configured secret: printed on the device, on a leaflet in the box, or set by the operator. A printed pairing PSK MUST be rendered as a QR code of its [pairing token](#pairing-token). When the secret is rotated, the client updates the hint accordingly.
+- `pairing_psk?`: object
+  - `locations?`: ('device' | 'leaflet' | 'operator')[]
+- `static_pairing_code?`: object
+  - `locations?`: ('device' | 'leaflet' | 'operator')[]
+- `dynamic_pairing_code?`: object
+  - `out_channels?`: ('display' | 'speaker')[] - informational hint listing the channels through which the per-session pairing code is conveyed to the operator.
+  - `formats`: ('digits' | 'qr_code')[] - the [emission formats](#dynamic-pairing-code-flow) the client offers. Non-empty; `qr_code` requires a display able to render a QR code.
 
-A server MUST ignore a descriptor whose `method` it does not recognize - leaving its other fields unvalidated - and select only among the rest. On a `dynamic_pairing_code` descriptor it likewise ignores unrecognized `formats` entries, treating a descriptor left with none as unrecognized; unrecognized `out_channels` and `locations` values are ignored. Identifiers not defined here are reserved for future revisions of this specification. As with [roles](README.md#role-versioning), servers should track ignored identifiers: they indicate the client speaks a newer revision than the server.
+`locations` is an informational hint listing where the operator can find the method's configured secret: printed on the device, on a leaflet in the box, or set by the operator. A printed pairing PSK MUST be rendered as a QR code of its [pairing token](#pairing-token). When the secret is rotated, the client updates the hint accordingly.
+
+A server MUST ignore a key it does not recognize - leaving its value unvalidated - and select only among the rest. It MUST likewise ignore unrecognized `formats`, `out_channels`, and `locations` values, treating a `dynamic_pairing_code` left with no recognized format as an unrecognized key. Identifiers not defined here are reserved for future revisions of this specification. As with [roles](README.md#role-versioning), servers should track ignored identifiers: they indicate the client speaks a newer revision than the server.
+
+The same descriptors are reported for every implemented method, enabled or not, by [`management/get-pairing-config`](management.md#server--client-managementget-pairing-config).
 
 ### Messages
 

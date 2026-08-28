@@ -477,7 +477,7 @@ Players that can output audio should have the role `player`.
 - `source@v1_support?`: object - required if `source@v1` is listed, absent otherwise ([see source@v1 support object details](#client--server-clienthello-sourcev1-support-object))
 - `artwork@v1_support?`: object - required if `artwork@v1` is listed, absent otherwise ([see artwork@v1 support object details](#client--server-clienthello-artworkv1-support-object))
 - `visualizer@v1_support?`: object - required if `visualizer@v1` is listed, absent otherwise ([see visualizer@v1 support object details](#client--server-clienthello-visualizerv1-support-object))
-- `supported_pair_methods`: object[] - pairing methods this client currently offers, each described by a [pair-method descriptor](#client--server-clienthello-pair-method-descriptor). An implemented method that is [disabled](#server--client-managementset-pairing-config) is omitted. Every client implements at least the Pairing PSK method (see [Pairing](#pairing)).
+- `supported_pair_methods`: object - pairing methods this client currently offers, keyed by method identifier, each value a [pair-method descriptor](#client--server-clienthello-pair-method-descriptor). An implemented method that is [disabled](#server--client-managementset-pairing-config) is omitted.
 - `unpaired_access`: object - whether this client currently admits [unpaired access](#unpaired-access)
   - `enabled`: boolean
 
@@ -506,7 +506,7 @@ The activity sets the server may legitimately declare are constrained by which P
 
 ¹ `['playback']` on the Sentinel PSK is only allowed when the client has [unpaired access](#unpaired-access) enabled.
 
-`pairing.method` MUST be `'pairing_psk'` if and only if the matched PSK is the [pairing PSK](#definitions). It MUST also be a method the client listed in [`supported_pair_methods`](#client--server-clienthello).
+`pairing.method` MUST be `'pairing_psk'` if and only if the matched PSK is the [pairing PSK](#definitions). It MUST also be a method present in the client's [`supported_pair_methods`](#client--server-clienthello).
 
 **Playback-capable connections.** A connection is *playback-capable* when its `activities` extended with `'playback'` are an allowed set for the matched PSK; a connection already declaring `'playback'` is therefore playback-capable exactly when its `activities` are an allowed set. Only a playback-capable connection MAY carry a non-empty `active_roles`, and it may do so even when `'playback'` is not currently in `activities`. The client re-evaluates this constraint on every `server/activate` against the persisted `active_roles`: if a later activation changes `activities` so the connection is no longer playback-capable without explicitly sending `active_roles`, the persisted roles are treated as empty rather than the message rejected.
 
@@ -1019,14 +1019,21 @@ A condition during pairing that no conformant peer produces - a malformed or mis
 
 ### Client → Server: `client/hello` pair-method descriptor
 
-Each entry in `supported_pair_methods` in [`client/hello`](#client--server-clienthello) is a descriptor object that names the pairing method and advertises the kind of operator interaction the client expects so the server can render appropriate UX.
+`supported_pair_methods` in [`client/hello`](#client--server-clienthello) is an object keyed by pairing method identifier. Each value is a descriptor object that advertises the kind of operator interaction the client expects so the server can render appropriate UX.
 
-- `method`: 'dynamic_pairing_code' | 'pairing_psk' | 'static_pairing_code' - the pairing method identifier.
-- `out_channels?`: ('display' | 'speaker')[] - informational hint for `dynamic_pairing_code` only, listing the channels through which the per-session pairing code is conveyed to the operator.
-- `formats?`: ('digits' | 'qr_code')[] - the [emission formats](#dynamic-pairing-code-flow) the client offers. Required on `dynamic_pairing_code` descriptors, absent on others. Non-empty; `qr_code` requires a display able to render a QR code.
-- `locations?`: ('device' | 'leaflet' | 'operator')[] - informational hint for `static_pairing_code` and `pairing_psk` only, listing where the operator can find the method's configured secret: printed on the device, on a leaflet in the box, or set by the operator. A printed pairing PSK MUST be rendered as a QR code of its [pairing token](#pairing-token). When the secret is rotated, the client updates the hint accordingly.
+- `pairing_psk?`: object
+  - `locations?`: ('device' | 'leaflet' | 'operator')[]
+- `static_pairing_code?`: object
+  - `locations?`: ('device' | 'leaflet' | 'operator')[]
+- `dynamic_pairing_code?`: object
+  - `out_channels?`: ('display' | 'speaker')[] - informational hint listing the channels through which the per-session pairing code is conveyed to the operator.
+  - `formats`: ('digits' | 'qr_code')[] - the [emission formats](#dynamic-pairing-code-flow) the client offers. Non-empty; `qr_code` requires a display able to render a QR code.
 
-A server MUST ignore a descriptor whose `method` it does not recognize - leaving its other fields unvalidated - and select only among the rest. On a `dynamic_pairing_code` descriptor it likewise ignores unrecognized `formats` entries, treating a descriptor left with none as unrecognized; unrecognized `out_channels` and `locations` values are ignored. Identifiers not defined here are reserved for future revisions of this specification. As with [roles](#role-versioning), servers should track ignored identifiers: they indicate the client speaks a newer revision than the server.
+`locations` is an informational hint listing where the operator can find the method's configured secret: printed on the device, on a leaflet in the box, or set by the operator. A printed pairing PSK MUST be rendered as a QR code of its [pairing token](#pairing-token). When the secret is rotated, the client updates the hint accordingly.
+
+A server MUST ignore a key it does not recognize - leaving its value unvalidated - and select only among the rest. It MUST likewise ignore unrecognized `formats`, `out_channels`, and `locations` values, treating a `dynamic_pairing_code` left with no recognized format as an unrecognized key. Identifiers not defined here are reserved for future revisions of this specification. As with [roles](#role-versioning), servers should track ignored identifiers: they indicate the client speaks a newer revision than the server.
+
+The same descriptors are reported for every implemented method, enabled or not, by [`management/get-pairing-config`](#server--client-managementget-pairing-config).
 
 ### Messages
 
@@ -1174,16 +1181,19 @@ On success, `data` is shaped as:
 
 - `pairing_psk`: object
   - `enabled`: boolean
+  - `descriptor`: object
 - `static_pairing_code?`: object
   - `enabled`: boolean
+  - `descriptor`: object
 - `dynamic_pairing_code?`: object
   - `enabled`: boolean
   - `escalated`: boolean - `true` when the method is [escalated](#failure-counter) to gesture-gating by its failure counter
+  - `descriptor`: object
 - `record_mode`: object - see [Record mode](#record-mode)
 - `unpaired_access`: object - see [Unpaired Access](#unpaired-access)
   - `enabled`: boolean
 
-A pairing-code method object is absent if the client does not implement that method.
+A pairing-code method object is absent if the client does not implement that method. Each `descriptor` is the method's [pair-method descriptor](#client--server-clienthello-pair-method-descriptor) as it would appear in `client/hello` were the method enabled.
 
 Configured secrets (the pairing PSK and the static pairing code) are not returned; use [`management/set-pairing-config`](#server--client-managementset-pairing-config) to rotate them.
 
